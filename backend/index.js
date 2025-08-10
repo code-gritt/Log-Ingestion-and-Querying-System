@@ -43,11 +43,9 @@ app.post("/logs", async (req, res) => {
 
     // Validate level
     if (!allowedLevels.includes(body.level)) {
-      return res
-        .status(400)
-        .json({
-          error: `Invalid level. Must be one of: ${allowedLevels.join(", ")}`,
-        });
+      return res.status(400).json({
+        error: `Invalid level. Must be one of: ${allowedLevels.join(", ")}`,
+      });
     }
 
     // Validate timestamp (ISO 8601)
@@ -75,6 +73,7 @@ app.post("/logs", async (req, res) => {
 
 // GET /logs - Retrieve filtered and sorted logs
 app.get("/logs", async (req, res) => {
+  res.set("Cache-Control", "no-cache");
   try {
     // Load all logs
     let logs = (await db.getData("/logs")) || [];
