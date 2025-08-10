@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      "/logs": "http://localhost:3000",
+      "/logs": "http://localhost:3000" || "https://log-ingestion.vercel.app/",
     },
   },
 });
