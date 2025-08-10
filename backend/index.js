@@ -7,22 +7,22 @@ const { JsonDB, Config } = require("node-json-db");
 const app = express();
 const port = 3000;
 
-// Middleware
+// Middleware setup
 app.use(express.json());
 app.use(cors());
 
-// Initialize JSON DB
-const db = new JsonDB(new Config("./data/logs.json", true, true, "/")); // Auto-save, human-readable
+// Initialize JSON database
+const db = new JsonDB(new Config("./data/logs.json", true, true, "/")); // Auto-save enabled, human-readable format
 
-// Allowed log levels
-const allowedLevels = ["error", "warn", "info", "debug"];
+// Define allowed log levels
+const validLevels = ["error", "warn", "info", "debug"];
 
-// POST /logs - Ingest a single log entry
+// POST /logs - Ingest and store a single log entry
 app.post("/logs", async (req, res) => {
   try {
-    const body = req.body;
+    const logEntry = req.body;
 
-    // Validate required fields
+    // Validate all required fields are present
     const requiredFields = [
       "level",
       "message",
@@ -34,51 +34,56 @@ app.post("/logs", async (req, res) => {
       "metadata",
     ];
     for (const field of requiredFields) {
-      if (!body[field]) {
+      if (!(field in logEntry)) {
         return res
           .status(400)
           .json({ error: `Missing required field: ${field}` });
       }
     }
 
-    // Validate level
-    if (!allowedLevels.includes(body.level)) {
-      return res.status(400).json({
-        error: `Invalid level. Must be one of: ${allowedLevels.join(", ")}`,
-      });
-    }
-
-    // Validate timestamp (ISO 8601)
-    if (isNaN(Date.parse(body.timestamp))) {
+    // Validate level is one of the allowed values
+    if (!validLevels.includes(logEntry.level)) {
       return res
         .status(400)
-        .json({ error: "Invalid timestamp format. Must be ISO 8601." });
+        .json({
+          error: `Invalid level. Must be one of: ${validLevels.join(", ")}`,
+        });
     }
 
-    // Validate metadata is an object
-    if (typeof body.metadata !== "object" || Array.isArray(body.metadata)) {
-      return res.status(400).json({ error: "Metadata must be a JSON object." });
+    // Validate timestamp is a valid ISO 8601 string
+    if (isNaN(Date.parse(logEntry.timestamp))) {
+      return res
+        .status(400)
+        .json({ error: "Invalid timestamp format. Must be ISO 8601" });
     }
 
-    // Append to logs array
-    await db.push("/logs[]", body);
+    // Validate metadata is a non-array object
+    if (
+      typeof logEntry.metadata !== "object" ||
+      Array.isArray(logEntry.metadata)
+    ) {
+      return res.status(400).json({ error: "Metadata must be a JSON object" });
+    }
 
-    // Return created log
-    res.status(201).json(body);
-  } catch (err) {
-    console.error("Error ingesting log:", err);
+    // Persist the log entry to the database
+    await db.push("/logs[]", logEntry);
+
+    // Respond with the created log entry
+    res.status(201).json(logEntry);
+  } catch (error) {
+    console.error("Failed to ingest log:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// GET /logs - Retrieve filtered and sorted logs
+// GET /logs - Retrieve and filter logs
 app.get("/logs", async (req, res) => {
-  res.set("Cache-Control", "no-cache");
+  res.set("Cache-Control", "no-cache"); // Prevent caching during development
   try {
-    // Load all logs
+    // Retrieve all logs, default to empty array if none exist
     let logs = (await db.getData("/logs")) || [];
 
-    // Extract query parameters
+    // Extract and apply query parameters for filtering
     const {
       level,
       message,
@@ -90,34 +95,46 @@ app.get("/logs", async (req, res) => {
       commit,
     } = req.query;
 
-    // Apply filters (AND logic)
+    // Apply level filter (support multiple levels with comma separation)
     if (level) {
-      const levels = level.split(","); // Support multi-level if comma-separated
+      const levels = level.split(",");
       logs = logs.filter((log) => levels.includes(log.level));
     }
+
+    // Apply case-insensitive message search
     if (message) {
-      const lowerMessage = message.toLowerCase();
+      const searchTerm = message.toLowerCase();
       logs = logs.filter((log) =>
-        log.message.toLowerCase().includes(lowerMessage)
+        log.message.toLowerCase().includes(searchTerm)
       );
     }
+
+    // Apply resourceId filter
     if (resourceId) {
       logs = logs.filter((log) => log.resourceId === resourceId);
     }
+
+    // Apply traceId filter
     if (traceId) {
       logs = logs.filter((log) => log.traceId === traceId);
     }
+
+    // Apply spanId filter
     if (spanId) {
       logs = logs.filter((log) => log.spanId === spanId);
     }
+
+    // Apply commit filter
     if (commit) {
       logs = logs.filter((log) => log.commit === commit);
     }
+
+    // Apply timestamp range filters with validation
     if (timestamp_start) {
       if (isNaN(Date.parse(timestamp_start))) {
         return res
           .status(400)
-          .json({ error: "Invalid timestamp_start format. Must be ISO 8601." });
+          .json({ error: "Invalid timestamp_start format. Must be ISO 8601" });
       }
       logs = logs.filter(
         (log) => new Date(log.timestamp) >= new Date(timestamp_start)
@@ -127,34 +144,34 @@ app.get("/logs", async (req, res) => {
       if (isNaN(Date.parse(timestamp_end))) {
         return res
           .status(400)
-          .json({ error: "Invalid timestamp_end format. Must be ISO 8601." });
+          .json({ error: "Invalid timestamp_end format. Must be ISO 8601" });
       }
       logs = logs.filter(
         (log) => new Date(log.timestamp) <= new Date(timestamp_end)
       );
     }
 
-    // Sort reverse chronological (most recent first)
+    // Sort logs in reverse chronological order
     logs.sort(
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-    // Return filtered logs
+    // Return filtered and sorted logs
     res.status(200).json(logs);
-  } catch (err) {
-    console.error("Error retrieving logs:", err);
+  } catch (error) {
+    console.error("Failed to retrieve logs:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
 
-// Global error handler
+// Global error handler for uncaught exceptions
 app.use((err, req, res, next) => {
-  console.error("Server error:", err);
+  console.error("Unexpected server error:", err);
   res.status(500).json({ error: "Internal server error" });
 });
 
-// Start server
+// Start the server
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });

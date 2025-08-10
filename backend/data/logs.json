@@ -4,12 +4,24 @@
             "level": "error",
             "message": "Failed to connect to database",
             "resourceId": "server-1234",
-            "timestamp": "2025-08-10T17:57:00Z",
+            "timestamp": "2025-08-10T17:57:00.000Z",
             "traceId": "abc-123",
             "spanId": "span-456",
             "commit": "5e5342f",
             "metadata": {
                 "parentResourceId": "server-5678"
+            }
+        },
+        {
+            "level": "info",
+            "message": "Server started",
+            "resourceId": "server-1000",
+            "timestamp": "2025-08-11T01:40:00Z",
+            "traceId": "pqr-789",
+            "spanId": "span-111",
+            "commit": "3c4d5e6",
+            "metadata": {
+                "status": "active"
             }
         }
     ]
