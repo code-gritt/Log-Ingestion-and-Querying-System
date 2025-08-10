@@ -1,0 +1,16 @@
+{
+    "logs": [
+        {
+            "level": "error",
+            "message": "Failed to connect to database",
+            "resourceId": "server-1234",
+            "timestamp": "2025-08-10T17:57:00Z",
+            "traceId": "abc-123",
+            "spanId": "span-456",
+            "commit": "5e5342f",
+            "metadata": {
+                "parentResourceId": "server-5678"
+            }
+        }
+    ]
+}
